@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass, field
 
 from app.game_logic import (
@@ -17,6 +18,7 @@ class GameSession:
     board: list[BingoSquareData] = field(default_factory=list)
     winning_line: BingoLine | None = None
     show_bingo_modal: bool = False
+    last_accessed: float = field(default_factory=time.time)
 
     @property
     def winning_square_ids(self) -> set[int]:
@@ -27,12 +29,14 @@ class GameSession:
         return self.game_state == GameState.BINGO
 
     def start_game(self) -> None:
+        self._update_accessed()
         self.board = generate_board()
         self.winning_line = None
         self.game_state = GameState.PLAYING
         self.show_bingo_modal = False
 
     def handle_square_click(self, square_id: int) -> None:
+        self._update_accessed()
         if self.game_state != GameState.PLAYING:
             return
         self.board = toggle_square(self.board, square_id)
@@ -45,14 +49,20 @@ class GameSession:
                 self.show_bingo_modal = True
 
     def reset_game(self) -> None:
+        self._update_accessed()
         self.game_state = GameState.START
         self.board = []
         self.winning_line = None
         self.show_bingo_modal = False
 
     def dismiss_modal(self) -> None:
+        self._update_accessed()
         self.show_bingo_modal = False
         self.game_state = GameState.PLAYING
+
+    def _update_accessed(self) -> None:
+        """Update the last accessed timestamp for session cleanup."""
+        self.last_accessed = time.time()
 
 
 # In-memory session store keyed by session ID
@@ -60,7 +70,16 @@ _sessions: dict[str, GameSession] = {}
 
 
 def get_session(session_id: str) -> GameSession:
-    """Get or create a game session for the given session ID."""
+    """Get or create a game session for the given session ID.
+    
+    Args:
+        session_id: Unique identifier for the session
+    
+    Returns:
+        GameSession instance for the given session_id
+    """
     if session_id not in _sessions:
         _sessions[session_id] = GameSession()
+    else:
+        _sessions[session_id]._update_accessed()
     return _sessions[session_id]
